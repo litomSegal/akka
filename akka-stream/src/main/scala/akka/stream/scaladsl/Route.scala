@@ -33,8 +33,8 @@ object Route {
   sealed trait DemandCondition
 
   /**
-   * Demand condition for the [[RouteLogic#State]] that will is
-   * fulfilled when there are request for elements from one specific downstream
+   * Demand condition for the [[RouteLogic#State]] that will be
+   * fulfilled when there are requests for elements from one specific downstream
    * output.
    *
    * It is not allowed to use a handle that has been cancelled or
@@ -47,8 +47,8 @@ object Route {
     def apply(outputs: immutable.Seq[OutputHandle]): DemandFromAny = new DemandFromAny(outputs: _*)
   }
   /**
-   * Demand condition for the [[RouteLogic#State]] that will is
-   * fulfilled when there are request for elements from any of the given downstream
+   * Demand condition for the [[RouteLogic#State]] that will be
+   * fulfilled when there are requests for elements from any of the given downstream
    * outputs.
    *
    * Cancelled and completed inputs are not used, i.e. it is allowed
@@ -60,8 +60,8 @@ object Route {
     def apply(outputs: immutable.Seq[OutputHandle]): DemandFromAll = new DemandFromAll(outputs: _*)
   }
   /**
-   * Demand condition for the [[RouteLogic#State]] that will is
-   * fulfilled when there are request for elements from all of the given downstream
+   * Demand condition for the [[RouteLogic#State]] that will be
+   * fulfilled when there are requests for elements from all of the given downstream
    * outputs.
    *
    * Cancelled and completed inputs are not used, i.e. it is allowed
@@ -103,7 +103,7 @@ object Route {
       /**
        * Complete the given downstream successfully.
        */
-      // FIXME def complete(output: OutputHandle): Unit
+      def complete(output: OutputHandle): Unit
 
       /**
        * Complete all downstreams successfully and cancel upstream.
@@ -113,14 +113,12 @@ object Route {
       /**
        * Complete the given downstream with failure.
        */
-      // FIXME def error(output: OutputHandle, cause: Throwable): Unit
-
-      def error(cause: Throwable): Unit
+      def error(output: OutputHandle, cause: Throwable): Unit
 
       /**
-       * Cancel the upstream input stream.
+       * Complete all downstreams with failure and cancel upstream.
        */
-      def cancel(): Unit
+      def error(cause: Throwable): Unit
 
       /**
        * Replace current [[CompletionHandling]].
@@ -169,17 +167,27 @@ object Route {
      * It returns next behavior or [[#SameState]] to keep current behavior.
      */
     sealed case class CompletionHandling(
-      //FIXME remove onComplete and onError? Not much you can do with them anyway?
       onComplete: RouteLogicContext[Any] ⇒ Unit,
       onError: (RouteLogicContext[Any], Throwable) ⇒ Unit,
       onCancel: (RouteLogicContext[Any], OutputHandle) ⇒ State[_])
 
+    /**
+     * When an output cancels it continues with remaining outputs.
+     * Error or completion from upstream are immediately propagated.
+     */
     val defaultCompletionHandling: CompletionHandling = CompletionHandling(
       onComplete = _ ⇒ (),
-      onError = (ctx, cause) ⇒ ctx.error(cause),
+      onError = (ctx, cause) ⇒ (),
       onCancel = (ctx, _) ⇒ SameState)
 
-    // FIXME eagerClose
+    /**
+     * Completes as soon as any output cancels.
+     * Error or completion from upstream are immediately propagated.
+     */
+    val eagerClose: CompletionHandling = CompletionHandling(
+      onComplete = _ ⇒ (),
+      onError = (ctx, cause) ⇒ (),
+      onCancel = (ctx, _) ⇒ { ctx.complete(); SameState })
 
   }
 

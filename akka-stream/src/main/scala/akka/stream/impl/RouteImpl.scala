@@ -48,7 +48,6 @@ private[akka] class RouteImpl(_settings: MaterializerSettings,
     }
 
     override def onComplete(): Unit = {
-      println(s"# primaryInputs onComplete") // FIXME
       completion.onComplete(ctx)
       super.onComplete()
     }
@@ -59,7 +58,6 @@ private[akka] class RouteImpl(_settings: MaterializerSettings,
       (output.portIndex < outputCount) && outputBunch.isPending(output.portIndex)
 
     override def emit(output: OutputHandle, elem: Any): Unit = {
-      println(s"# emit [$elem] to $output") // FIXME
       require(outputBunch.isPending(output.portIndex), s"emit to [$output] not allowed when no demand available")
       outputBunch.enqueue(output.portIndex, elem)
     }
@@ -70,13 +68,13 @@ private[akka] class RouteImpl(_settings: MaterializerSettings,
       context.stop(self)
     }
 
+    override def complete(output: OutputHandle): Unit =
+      outputBunch.complete(output.portIndex)
+
     override def error(cause: Throwable): Unit = fail(cause)
 
-    override def cancel(): Unit = {
-      primaryInputs.cancel()
-      // FIXME what needs to be done without outputBunch?
-      context.stop(self)
-    }
+    override def error(output: OutputHandle, cause: Throwable): Unit =
+      outputBunch.error(output.portIndex, cause)
 
     override def changeCompletionHandling(newCompletion: CompletionT): Unit =
       RouteImpl.this.changeCompletionHandling(newCompletion)

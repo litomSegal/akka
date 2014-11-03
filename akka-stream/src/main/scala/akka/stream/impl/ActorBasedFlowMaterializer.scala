@@ -236,7 +236,7 @@ case class ActorBasedFlowMaterializer(override val settings: MaterializerSetting
 
     op match {
       case fanin: Ast.FanInAstNode ⇒
-        val impl = op match {
+        val impl = fanin match {
           case Ast.Merge ⇒
             actorOf(FairMerge.props(settings, inputCount).withDispatcher(settings.dispatcher), actorName)
           case Ast.MergePreferred ⇒
@@ -256,7 +256,7 @@ case class ActorBasedFlowMaterializer(override val settings: MaterializerSetting
         (subscribers, List(publisher))
 
       case fanout: Ast.FanOutAstNode ⇒
-        val impl = op match {
+        val impl = fanout match {
           case Ast.Broadcast ⇒
             actorOf(Broadcast.props(settings, outputCount).withDispatcher(settings.dispatcher), actorName)
           case Ast.Balance(waitForAllDownstreams) ⇒

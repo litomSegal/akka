@@ -47,6 +47,7 @@ private[akka] object FanOut {
     private val cancelled = Array.ofDim[Boolean](outputCount)
     private var markedCancelled = 0
     private val completed = Array.ofDim[Boolean](outputCount)
+    private val errored = Array.ofDim[Boolean](outputCount)
 
     private var unmarkCancelled = true
 
@@ -61,11 +62,15 @@ private[akka] object FanOut {
     def complete(): Unit =
       if (!bunchCancelled) {
         bunchCancelled = true
-        outputs foreach (_.complete())
+        var i = 0
+        while (i < outputs.length) {
+          complete(i)
+          i += 1
+        }
       }
 
     def complete(output: Int) =
-      if (!completed(output)) {
+      if (!completed(output) && !errored(output) && !cancelled(output)) {
         outputs(output).complete()
         completed(output) = true
         unmarkOutput(output)
@@ -74,7 +79,18 @@ private[akka] object FanOut {
     def cancel(e: Throwable): Unit =
       if (!bunchCancelled) {
         bunchCancelled = true
-        outputs foreach (_.cancel(e))
+        var i = 0
+        while (i < outputs.length) {
+          error(i, e)
+          i += 1
+        }
+      }
+
+    def error(output: Int, e: Throwable): Unit =
+      if (!errored(output) && !cancelled(output) && !completed(output)) {
+        outputs(output).cancel(e)
+        errored(output) = true
+        unmarkOutput(output)
       }
 
     def markOutput(output: Int): Unit = {

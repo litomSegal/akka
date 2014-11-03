@@ -34,7 +34,7 @@ object FlexiMerge {
 
   sealed trait ReadCondition
   /**
-   * Read condition for the [[MergeLogic#State]] that will is
+   * Read condition for the [[MergeLogic#State]] that will be
    * fulfilled when there are elements for one specific upstream
    * input.
    *
@@ -48,7 +48,7 @@ object FlexiMerge {
     def apply(inputs: immutable.Seq[InputHandle]): ReadAny = new ReadAny(inputs: _*)
   }
   /**
-   * Read condition for the [[MergeLogic#State]] that will is
+   * Read condition for the [[MergeLogic#State]] that will be
    * fulfilled when there are elements for any of the given upstream
    * inputs.
    *

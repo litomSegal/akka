@@ -85,8 +85,7 @@ object GraphRouteSpec {
         SameState
       }
 
-      // FIXME if one leg cancels it should stop
-      //      override def initialCompletionHandling = eagerClose
+      override def initialCompletionHandling = eagerClose
     }
   }
 
@@ -104,10 +103,10 @@ object GraphRouteSpec {
 
       override def initialState = State[String](DemandFromAny(handles)) {
         (ctx, preferred, element) ⇒
-          if (element == "cancel")
-            ctx.cancel()
-          else if (element == "err")
+          if (element == "err")
             ctx.error(new RuntimeException("err") with NoStackTrace)
+          else if (element == "err-output1")
+            ctx.error(output1, new RuntimeException("err-1") with NoStackTrace)
           else if (element == "complete")
             ctx.complete()
           else
@@ -208,9 +207,6 @@ class GraphRouteSpec extends AkkaSpec {
           elem
       }
 
-      println(s"# elements1: $elements1") // FIXME
-      println(s"# elements2: $elements2") // FIXME
-
       (elements1 ++ elements2).toSet should be(Set("a", "b", "c", "d", "e"))
       (elements1.toSet.intersect(elements2.toSet)) should be(Set.empty)
 
@@ -254,7 +250,7 @@ class GraphRouteSpec extends AkkaSpec {
 
       val m = FlowGraph { implicit b ⇒
         val route = new Unzip[Int, String]
-        Source(List(1 -> "A", 2 -> "B", 3 -> "C")) ~> route.in
+        Source(List(1 -> "A", 2 -> "B", 3 -> "C", 4 -> "D")) ~> route.in
         route.outA ~> outA
         route.outB ~> outB
       }.run()
@@ -268,8 +264,8 @@ class GraphRouteSpec extends AkkaSpec {
       p2.subscribe(s2)
       val sub2 = s2.expectSubscription()
 
-      sub1.request(10)
-      sub2.request(10)
+      sub1.request(3)
+      sub2.request(4)
 
       s1.expectNext(1)
       s2.expectNext("A")
@@ -277,23 +273,22 @@ class GraphRouteSpec extends AkkaSpec {
       s2.expectNext("B")
       s1.expectNext(3)
       s2.expectNext("C")
+      sub1.cancel()
 
-      s1.expectComplete()
       s2.expectComplete()
     }
 
-    "support cancel of upstream" in {
+    "support complete of downstreams and cancel of upstream" in {
       val fixture = new TestFixture
       import fixture._
 
-      autoPublisher.sendNext("cancel")
+      autoPublisher.sendNext("complete")
 
       sub1.request(1)
       s1.expectNext("onInput: a")
       sub2.request(2)
       s2.expectNext("onInput: b")
 
-      // FIXME is this expected default behavior of ctx.cancel?
       s1.expectComplete()
       s2.expectComplete()
     }
@@ -311,9 +306,30 @@ class GraphRouteSpec extends AkkaSpec {
 
       s1.expectError().getMessage should be("err")
       s2.expectError().getMessage should be("err")
+      autoPublisher.subscription.expectCancellation()
     }
 
-    "support error of a specific output" in pending
+    "support error of a specific output" in {
+      val fixture = new TestFixture
+      import fixture._
+
+      sub1.request(1)
+      s1.expectNext("onInput: a")
+      sub2.request(1)
+      s2.expectNext("onInput: b")
+
+      sub1.request(5)
+      sub2.request(5)
+      autoPublisher.sendNext("err-output1")
+      autoPublisher.sendNext("c")
+
+      s2.expectNext("onInput: c")
+      s1.expectError().getMessage should be("err-1")
+
+      autoPublisher.sendComplete()
+      s2.expectNext("onComplete")
+      s2.expectComplete()
+    }
 
     "handle cancel from output" in {
       val fixture = new TestFixture
@@ -378,11 +394,41 @@ class GraphRouteSpec extends AkkaSpec {
       s2.expectError().getMessage should be("test err")
     }
 
-    "cancel upstream input when all outputs cancelled" in pending
+    "cancel upstream input when all outputs cancelled" in {
+      val fixture = new TestFixture
+      import fixture._
 
-    "cancel upstream input when all outputs completed" in pending
+      sub1.request(1)
+      s1.expectNext("onInput: a")
+      sub2.request(1)
+      s2.expectNext("onInput: b")
 
-    "cancel upstream input when all outputs errored" in pending
+      sub1.request(2)
+      sub2.request(2)
+      sub1.cancel()
+
+      s2.expectNext("onCancel: 0")
+      sub2.cancel()
+
+      autoPublisher.subscription.expectCancellation()
+    }
+
+    "cancel upstream input when all outputs completed" in {
+      val fixture = new TestFixture
+      import fixture._
+
+      sub1.request(1)
+      s1.expectNext("onInput: a")
+      sub2.request(1)
+      s2.expectNext("onInput: b")
+
+      sub1.request(2)
+      sub2.request(2)
+      autoPublisher.sendNext("complete")
+      s1.expectComplete()
+      s2.expectComplete()
+      autoPublisher.subscription.expectCancellation()
+    }
 
   }
 }
