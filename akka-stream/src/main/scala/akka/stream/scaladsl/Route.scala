@@ -80,7 +80,6 @@ object Route {
     def outputHandles(outputCount: Int): immutable.IndexedSeq[OutputHandle]
     def initialState: State[_]
     def initialCompletionHandling: CompletionHandling = defaultCompletionHandling
-    def waitForAllDownstreams: Boolean
 
     /**
      * Context that is passed to the functions of [[State]] and [[CompletionHandling]].

@@ -24,7 +24,6 @@ object GraphRouteSpec {
     val out2 = createOutputPort[T]()
 
     override def createRouteLogic: RouteLogic[T] = new RouteLogic[T] {
-      override def waitForAllDownstreams: Boolean = true
       override def outputHandles(outputCount: Int) = Vector(out1, out2)
       override def initialState = State[T](DemandFromAny(out1, out1)) { (ctx, preferredOutput, element) ⇒
         ctx.emit(preferredOutput, element)
@@ -43,8 +42,6 @@ object GraphRouteSpec {
     val out2 = createOutputPort[T]()
 
     override def createRouteLogic = new RouteLogic[T] {
-
-      override def waitForAllDownstreams: Boolean = true
 
       override def outputHandles(outputCount: Int) = Vector(out1, out2)
 
@@ -71,8 +68,6 @@ object GraphRouteSpec {
       var lastInA: Option[A] = None
       var lastInB: Option[B] = None
 
-      override def waitForAllDownstreams: Boolean = true
-
       override def outputHandles(outputCount: Int) = {
         require(outputCount == 2, s"Unzip must have two connected outputs, was $outputCount")
         Vector(outA, outB)
@@ -98,8 +93,6 @@ object GraphRouteSpec {
     def createRouteLogic: RouteLogic[String] = new RouteLogic[String] {
       val handles = Vector(output1, output2, output3)
       override def outputHandles(outputCount: Int) = handles
-
-      override def waitForAllDownstreams: Boolean = true
 
       override def initialState = State[String](DemandFromAny(handles)) {
         (ctx, preferred, element) ⇒

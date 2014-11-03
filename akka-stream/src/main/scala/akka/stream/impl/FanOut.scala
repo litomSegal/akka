@@ -35,7 +35,7 @@ private[akka] object FanOut {
 
   case class ExposedPublishers(publishers: immutable.Seq[ActorPublisher[Any]])
 
-  class OutputBunch(outputCount: Int, impl: ActorRef, pump: Pump, markOutputOnSubscribe: Boolean) {
+  class OutputBunch(outputCount: Int, impl: ActorRef, pump: Pump) {
     private var bunchCancelled = false
 
     private val outputs = Array.tabulate(outputCount)(new FanoutOutputs(_, impl, pump))
@@ -196,11 +196,6 @@ private[akka] object FanOut {
       override def isReady: Boolean = markedPending > 0
     }
 
-    val AllOutputsMarked = new TransferState {
-      override def isCompleted: Boolean = false
-      override def isReady: Boolean = markedCount == outputCount
-    }
-
     // FIXME: Eliminate re-wraps
     def subreceive: SubReceive = new SubReceive({
       case ExposedPublishers(publishers) ⇒
@@ -222,8 +217,6 @@ private[akka] object FanOut {
         onCancel(id)
         outputs(id).subreceive(Cancel(null))
       case SubstreamSubscribePending(id) ⇒
-        if (markOutputOnSubscribe)
-          markOutput(id)
         outputs(id).subreceive(SubscribePending)
     })
 
@@ -234,10 +227,10 @@ private[akka] object FanOut {
 /**
  * INTERNAL API
  */
-private[akka] abstract class FanOut(val settings: MaterializerSettings, val outputPorts: Int, markOutputOnSubscribe: Boolean) extends Actor with ActorLogging with Pump {
+private[akka] abstract class FanOut(val settings: MaterializerSettings, val outputPorts: Int) extends Actor with ActorLogging with Pump {
   import FanOut._
 
-  protected val outputBunch = new OutputBunch(outputPorts, self, this, markOutputOnSubscribe)
+  protected val outputBunch = new OutputBunch(outputPorts, self, this)
   protected val primaryInputs: Inputs = new BatchingInputBuffer(settings.maxInputBufferSize, this) {
     override def onError(e: Throwable): Unit = fail(e)
   }
@@ -282,7 +275,7 @@ private[akka] object Broadcast {
 /**
  * INTERNAL API
  */
-private[akka] class Broadcast(_settings: MaterializerSettings, _outputPorts: Int) extends FanOut(_settings, _outputPorts, false) {
+private[akka] class Broadcast(_settings: MaterializerSettings, _outputPorts: Int) extends FanOut(_settings, _outputPorts) {
   outputBunch.markAllOutputs()
 
   nextPhase(TransferPhase(primaryInputs.NeedsInput && outputBunch.AllOfMarkedOutputs) { () ⇒
@@ -302,20 +295,20 @@ private[akka] object Balance {
 /**
  * INTERNAL API
  */
-private[akka] class Balance(_settings: MaterializerSettings, _outputPorts: Int, waitForAllDownstreams: Boolean) extends FanOut(_settings, _outputPorts, waitForAllDownstreams) {
+private[akka] class Balance(_settings: MaterializerSettings, _outputPorts: Int, waitForAllDownstreams: Boolean) extends FanOut(_settings, _outputPorts) {
+  outputBunch.markAllOutputs()
 
   val runningPhase = TransferPhase(primaryInputs.NeedsInput && outputBunch.AnyOfMarkedOutputs) { () ⇒
     val elem = primaryInputs.dequeueInputElement()
     outputBunch.enqueueAndYield(elem)
   }
 
-  if (!waitForAllDownstreams) {
-    outputBunch.markAllOutputs()
-    nextPhase(runningPhase)
-  } else
-    nextPhase(TransferPhase(primaryInputs.NeedsInput && outputBunch.AllOutputsMarked) { () ⇒
+  if (waitForAllDownstreams)
+    nextPhase(TransferPhase(primaryInputs.NeedsInput && outputBunch.AllOfMarkedOutputs) { () ⇒
       nextPhase(runningPhase)
     })
+  else
+    nextPhase(runningPhase)
 }
 
 /**
@@ -329,7 +322,7 @@ private[akka] object Unzip {
 /**
  * INTERNAL API
  */
-private[akka] class Unzip(_settings: MaterializerSettings) extends FanOut(_settings, outputPorts = 2, false) {
+private[akka] class Unzip(_settings: MaterializerSettings) extends FanOut(_settings, outputPorts = 2) {
   outputBunch.markAllOutputs()
 
   nextPhase(TransferPhase(primaryInputs.NeedsInput && outputBunch.AllOfMarkedOutputs) { () ⇒

@@ -23,7 +23,7 @@ private[akka] object RouteImpl {
 private[akka] class RouteImpl(_settings: MaterializerSettings,
                               outputCount: Int,
                               routeLogic: Route.RouteLogic[Any])
-  extends FanOut(_settings, outputCount, routeLogic.waitForAllDownstreams) {
+  extends FanOut(_settings, outputCount) {
 
   import Route._
 
@@ -36,7 +36,7 @@ private[akka] class RouteImpl(_settings: MaterializerSettings,
   private var behavior: StateT = _
   private var completion: CompletionT = _
 
-  override protected val outputBunch = new OutputBunch(outputPorts, self, this, routeLogic.waitForAllDownstreams) {
+  override protected val outputBunch = new OutputBunch(outputPorts, self, this) {
     override def onCancel(output: Int): Unit =
       changeBehavior(completion.onCancel(ctx, outputMapping(output)))
   }
